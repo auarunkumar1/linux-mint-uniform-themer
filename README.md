@@ -152,13 +152,15 @@ When you apply a theme, `cinna-theme` automates the following steps:
    - `gsettings set org.cinnamon.desktop.interface color-scheme "prefer-dark"` (or `"prefer-light"`)
    - `gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"`
    - Links `<theme_path>/gtk-4.0/gtk.css` and `assets` to `~/.config/gtk-4.0/`.
-3. **GTK 3 Settings File**:
-   - Generates and writes `~/.config/gtk-3.0/settings.ini` with theme, icon, and cursor definitions.
-4. **Root X11 Window Cursor**:
-   - Updates `~/.icons/default/index.theme` to ensure legacy and root-level apps inherit the cursor.
+3. **GTK 3 & GTK 4 Settings Files**:
+   - Generates and synchronizes both `~/.config/gtk-3.0/settings.ini` and `~/.config/gtk-4.0/settings.ini` with theme, icon, and cursor definitions (`gtk-cursor-theme-name`, `gtk-cursor-theme-size`).
+4. **User-Space Cursor Shadowing & X11 Sync**:
+   - **User-Space Shadowing**: Flatpak sandboxes cannot access `/usr/share/icons/` from the host. `cinna-theme` automatically detects and shadows host system cursor themes into `~/.icons/<theme>` so sandboxed apps have direct read access.
+   - **X11 Resources (`xrdb`)**: Merges `Xcursor.theme` and `Xcursor.size` dynamically into the active X11 server via `xrdb -merge` and updates `~/.Xresources`.
+   - **Root Window**: Updates `~/.icons/default/index.theme` so legacy, root-level, and desktop boundary windows inherit the cursor.
 5. **Flatpak Sandbox Overrides**:
-   - Grants read-only filesystem permissions for themes and icons.
-   - Sets environment variables: `GTK_THEME`, `ICON_THEME`, `XCURSOR_THEME`, `XCURSOR_SIZE=24`, and `QT_QPA_PLATFORMTHEME=qt5ct`.
+   - Grants read-only filesystem permissions for themes, icons, and GTK 3/4 configurations (`xdg-data/themes`, `xdg-data/icons`, `~/.themes`, `~/.icons`, `xdg-config/gtk-3.0`, `xdg-config/gtk-4.0`).
+   - Sets environment variables: `GTK_THEME`, `ICON_THEME`, `XCURSOR_THEME`, `XCURSOR_SIZE`, and `QT_QPA_PLATFORMTHEME=qt5ct`.
 
 ---
 

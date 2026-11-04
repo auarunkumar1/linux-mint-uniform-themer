@@ -100,7 +100,7 @@ def main():
             status.get("gtk_theme", "Mint-Y-Dark"),
             status.get("icon_theme", "Mint-Y"),
             status.get("cursor_theme", "Bibata-Modern-Classic"),
-            24,
+            int(status.get("cursor_size") or 24),
             print
         )
     elif args.fallback or args.reset:

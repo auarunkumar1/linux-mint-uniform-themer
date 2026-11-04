@@ -28,7 +28,7 @@ class ThemeManager:
         GTK3_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         GTK4_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    def run_cmd(self, cmd: List[str], check: bool = False, env_extra: Optional[Dict[str, str]] = None) -> Tuple[int, str]:
+    def run_cmd(self, cmd: List[str], check: bool = False, env_extra: Optional[Dict[str, str]] = None, input_text: Optional[str] = None) -> Tuple[int, str]:
         """Execute a shell command with proper user-bin paths and return exit code and stripped output."""
         try:
             env = os.environ.copy()
@@ -36,10 +36,72 @@ class ThemeManager:
             env["LD_LIBRARY_PATH"] = f"{HOME}/.local/lib:{env.get('LD_LIBRARY_PATH', '')}"
             if env_extra:
                 env.update(env_extra)
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=check, env=env)
+            res = subprocess.run(
+                cmd,
+                input=input_text,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=check,
+                env=env
+            )
             return res.returncode, res.stdout.strip()
         except Exception as e:
             return -1, str(e)
+
+    def ensure_cursor_in_user_space(self, cursor_name: str, log: Callable[[str], None] = lambda m: None) -> bool:
+        """Ensure the cursor theme is available in ~/.icons so Flatpak sandboxes can access it."""
+        if not cursor_name:
+            return False
+
+        target_dir = USER_ICONS_DIR / cursor_name
+        if target_dir.exists() and (target_dir / "cursors").exists():
+            return True
+
+        candidates = [
+            ICONS_DIR / cursor_name,
+            SYSTEM_ICONS_DIR / cursor_name
+        ]
+
+        for cand in candidates:
+            if cand.exists() and (cand / "cursors").exists():
+                log(f"Shadowing cursor theme '{cursor_name}' from {cand} to ~/.icons for Flatpak access...")
+                try:
+                    if target_dir.exists():
+                        shutil.rmtree(target_dir, ignore_errors=True)
+                    shutil.copytree(cand, target_dir, symlinks=True)
+                    log(f"Cursor '{cursor_name}' successfully copied to ~/.icons.")
+                    return True
+                except Exception as e:
+                    log(f"Warning: Failed to copy cursor '{cursor_name}' to ~/.icons: {e}")
+                    return False
+
+        return False
+
+    def update_xresources_cursor(self, cursor_theme: str, cursor_size: int, log: Callable[[str], None] = lambda m: None):
+        """Update xrdb and ~/.Xresources with active Xcursor settings for X11 & Flatpak compatibility."""
+        if not cursor_theme:
+            return
+        xres_content = f"Xcursor.theme: {cursor_theme}\nXcursor.size: {cursor_size}\n"
+        code, out = self.run_cmd(["xrdb", "-merge"], input_text=xres_content)
+        if code == 0:
+            log("Merged Xcursor settings into active X server via xrdb.")
+        else:
+            log(f"xrdb note: {out}")
+
+        xres_file = HOME / ".Xresources"
+        try:
+            lines = []
+            if xres_file.exists():
+                for line in xres_file.read_text().splitlines():
+                    if not line.strip().startswith(("Xcursor.theme:", "Xcursor.size:")):
+                        lines.append(line)
+            lines.append(f"Xcursor.theme: {cursor_theme}")
+            lines.append(f"Xcursor.size: {cursor_size}")
+            xres_file.write_text("\n".join(lines) + "\n")
+            log("Updated ~/.Xresources with Xcursor settings.")
+        except Exception as e:
+            log(f"Could not update ~/.Xresources: {e}")
 
     def get_gsetting(self, schema: str, key: str) -> str:
         code, out = self.run_cmd(["gsettings", "get", schema, key])
@@ -403,9 +465,8 @@ class ThemeManager:
             self.set_gsetting("org.gnome.desktop.interface", "cursor-theme", cursor_theme)
             self.set_gsetting("org.gnome.desktop.interface", "cursor-size", str(cursor_size))
 
-        # 3. GTK 3 User Configuration (~/.config/gtk-3.0/settings.ini)
-        gtk3_ini = GTK3_CONFIG_DIR / "settings.ini"
-        gtk3_content = (
+        # 3. GTK 3 & GTK 4 User Configuration (~/.config/gtk-3.0/settings.ini & gtk-4.0/settings.ini)
+        gtk_ini_content = (
             f"[Settings]\n"
             f"gtk-theme-name = {gtk_theme}\n"
             f"gtk-icon-theme-name = {icon_theme}\n"
@@ -414,15 +475,19 @@ class ThemeManager:
             f"gtk-application-prefer-dark-theme = {'1' if mode == 'dark' else '0'}\n"
             f"gtk-font-name = Ubuntu 10\n"
         )
-        gtk3_ini.write_text(gtk3_content)
+        (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk_ini_content)
+        (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk_ini_content)
+        log("Updated GTK 3.0 and GTK 4.0 settings.ini")
 
-        # 4. Legacy X11 / Root Window Cursor Configuration (~/.icons/default/index.theme)
+        # 4. Shadow cursor to ~/.icons for Flatpaks, write default index.theme & update xrdb
         if cursor_theme:
+            self.ensure_cursor_in_user_space(cursor_theme, log)
             default_cursor_dir = USER_ICONS_DIR / "default"
             default_cursor_dir.mkdir(parents=True, exist_ok=True)
             default_index = default_cursor_dir / "index.theme"
             default_index.write_text(f"[icon theme]\nInherits={cursor_theme}\n")
             log("Updated ~/.icons/default/index.theme")
+            self.update_xresources_cursor(cursor_theme, cursor_size, log)
 
         # 5. GTK 4 / Libadwaita Uniformity Override
         self._apply_gtk4_override(gtk_theme, mode, log)
@@ -479,6 +544,25 @@ class ThemeManager:
         """Grant Flatpaks filesystem access to themes and set environment variables including cursors."""
         log("Configuring Flatpak sandbox permissions and environment (including cursor theme)...")
         
+        # Ensure cursor is in user space and xrdb is refreshed
+        if cursor_theme:
+            self.ensure_cursor_in_user_space(cursor_theme, log)
+            self.update_xresources_cursor(cursor_theme, cursor_size, log)
+
+        # Sync GTK 3 & GTK 4 settings.ini so sandboxed apps read the current cursor & theme
+        gtk_ini_content = (
+            f"[Settings]\n"
+            f"gtk-theme-name = {gtk_theme}\n"
+            f"gtk-icon-theme-name = {icon_theme}\n"
+            f"gtk-cursor-theme-name = {cursor_theme}\n"
+            f"gtk-cursor-theme-size = {cursor_size}\n"
+            f"gtk-application-prefer-dark-theme = 1\n"
+            f"gtk-font-name = Ubuntu 10\n"
+        )
+        (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk_ini_content)
+        (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk_ini_content)
+        log("Synchronized ~/.config/gtk-3.0/settings.ini and gtk-4.0/settings.ini.")
+
         # Filesystem permissions
         fs_rules = [
             "xdg-data/themes:ro",
@@ -534,9 +618,8 @@ class ThemeManager:
         self.set_gsetting("org.gnome.desktop.interface", "cursor-size", "24")
         self.set_gsetting("org.gnome.desktop.interface", "color-scheme", "prefer-dark")
 
-        # 2. Reset ~/.config/gtk-3.0/settings.ini
-        gtk3_ini = GTK3_CONFIG_DIR / "settings.ini"
-        gtk3_content = (
+        # 2. Reset ~/.config/gtk-3.0/settings.ini & gtk-4.0/settings.ini
+        gtk_content = (
             f"[Settings]\n"
             f"gtk-theme-name = {default_theme}\n"
             f"gtk-icon-theme-name = {default_icon}\n"
@@ -545,17 +628,20 @@ class ThemeManager:
             f"gtk-application-prefer-dark-theme = 1\n"
             f"gtk-font-name = Ubuntu 10\n"
         )
-        gtk3_ini.write_text(gtk3_content)
+        (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk_content)
+        (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk_content)
 
         # 3. Clean GTK 4 symlinks so Libadwaita reverts to pure default
         for link in [GTK4_CONFIG_DIR / "gtk.css", GTK4_CONFIG_DIR / "gtk-dark.css", GTK4_CONFIG_DIR / "assets"]:
             if link.is_symlink():
                 link.unlink()
 
-        # 4. Clean root cursor index.theme
+        # 4. Clean root cursor index.theme & ensure default cursor is in user space
+        self.ensure_cursor_in_user_space(default_cursor, log)
         default_index = USER_ICONS_DIR / "default" / "index.theme"
         if default_index.parent.exists():
             default_index.write_text(f"[icon theme]\nInherits={default_cursor}\n")
+        self.update_xresources_cursor(default_cursor, 24, log)
 
         # 5. Clean Flatpak overrides
         log("Resetting Flatpak user overrides...")
