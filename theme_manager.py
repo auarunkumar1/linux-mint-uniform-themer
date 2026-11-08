@@ -78,6 +78,35 @@ class ThemeManager:
 
         return False
 
+    def ensure_theme_in_user_space(self, theme_name: str, log: Callable[[str], None] = lambda m: None) -> bool:
+        """Ensure the GTK theme is available in ~/.themes so Flatpak sandboxes can access it."""
+        if not theme_name:
+            return False
+
+        target_dir = THEMES_DIR / theme_name
+        if target_dir.exists() and (target_dir / "gtk-3.0").exists():
+            return True
+
+        candidates = [
+            HOME / ".local" / "share" / "themes" / theme_name,
+            SYSTEM_THEMES_DIR / theme_name
+        ]
+
+        for cand in candidates:
+            if cand.exists() and ((cand / "gtk-3.0").exists() or (cand / "cinnamon").exists()):
+                log(f"Shadowing system theme '{theme_name}' from {cand} to ~/.themes for Flatpak access...")
+                try:
+                    if target_dir.exists():
+                        shutil.rmtree(target_dir, ignore_errors=True)
+                    shutil.copytree(cand, target_dir, symlinks=True)
+                    log(f"Theme '{theme_name}' successfully copied to ~/.themes.")
+                    return True
+                except Exception as e:
+                    log(f"Warning: Failed to copy theme '{theme_name}' to ~/.themes: {e}")
+                    return False
+
+        return False
+
     def update_xresources_cursor(self, cursor_theme: str, cursor_size: int, log: Callable[[str], None] = lambda m: None):
         """Update xrdb and ~/.Xresources with active Xcursor settings for X11 & Flatpak compatibility."""
         if not cursor_theme:
@@ -469,6 +498,7 @@ class ThemeManager:
             self.set_gsetting("org.gnome.desktop.interface", "cursor-size", str(cursor_size))
 
         # 3. GTK 3 & GTK 4 User Configuration (~/.config/gtk-3.0/settings.ini & gtk-4.0/settings.ini)
+        self.ensure_theme_in_user_space(gtk_theme, log)
         button_layout = self.get_gsetting("org.cinnamon.desktop.wm.preferences", "button-layout") or ":minimize,maximize,close"
 
         gtk3_ini_content = (
@@ -563,7 +593,9 @@ class ThemeManager:
         """Grant Flatpaks filesystem access to themes and set environment variables including cursors."""
         log("Configuring Flatpak sandbox permissions and environment (including cursor theme)...")
         
-        # Ensure cursor is in user space and xrdb is refreshed
+        # Ensure cursor and theme are in user space and xrdb is refreshed
+        if gtk_theme:
+            self.ensure_theme_in_user_space(gtk_theme, log)
         if cursor_theme:
             self.ensure_cursor_in_user_space(cursor_theme, log)
             self.update_xresources_cursor(cursor_theme, cursor_size, log)
@@ -692,7 +724,8 @@ class ThemeManager:
             if link.is_symlink():
                 link.unlink()
 
-        # 4. Clean root cursor index.theme & ensure default cursor is in user space
+        # 4. Clean root cursor index.theme & ensure default cursor and theme are in user space
+        self.ensure_theme_in_user_space(default_theme, log)
         self.ensure_cursor_in_user_space(default_cursor, log)
         default_index = USER_ICONS_DIR / "default" / "index.theme"
         if default_index.parent.exists():
