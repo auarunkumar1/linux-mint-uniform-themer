@@ -147,7 +147,10 @@ class ThemeManager:
         ) and (
             "xdg-config/gtk-4.0:ro" in flatpak_out
         )
-        flatpak_env_synced = f"GTK_THEME={gtk_theme}" in flatpak_out and f"XCURSOR_THEME={cursor_theme}" in flatpak_out
+        flatpak_env_synced = (
+            f"XCURSOR_THEME={cursor_theme}" in flatpak_out and
+            "GTK_THEME=" not in flatpak_out
+        )
 
         # List installed components
         installed_themes = self.get_installed_themes()
@@ -466,18 +469,34 @@ class ThemeManager:
             self.set_gsetting("org.gnome.desktop.interface", "cursor-size", str(cursor_size))
 
         # 3. GTK 3 & GTK 4 User Configuration (~/.config/gtk-3.0/settings.ini & gtk-4.0/settings.ini)
-        gtk_ini_content = (
+        button_layout = self.get_gsetting("org.cinnamon.desktop.wm.preferences", "button-layout") or ":minimize,maximize,close"
+
+        gtk3_ini_content = (
             f"[Settings]\n"
             f"gtk-theme-name = {gtk_theme}\n"
             f"gtk-icon-theme-name = {icon_theme}\n"
             f"gtk-cursor-theme-name = {cursor_theme}\n"
             f"gtk-cursor-theme-size = {cursor_size}\n"
+            f"gtk-decoration-layout = {button_layout}\n"
             f"gtk-application-prefer-dark-theme = {'1' if mode == 'dark' else '0'}\n"
             f"gtk-font-name = Ubuntu 10\n"
         )
-        (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk_ini_content)
-        (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk_ini_content)
-        log("Updated GTK 3.0 and GTK 4.0 settings.ini")
+        (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk3_ini_content)
+
+        # For GTK 4 / Libadwaita: only set cursor, icons, and decoration layout in settings.ini.
+        # Custom theming is loaded via ~/.config/gtk-4.0/gtk.css. Setting gtk-theme-name to a
+        # legacy GTK3 theme breaks Libadwaita window headerbars and strips button CSS.
+        gtk4_ini_content = (
+            f"[Settings]\n"
+            f"gtk-icon-theme-name = {icon_theme}\n"
+            f"gtk-cursor-theme-name = {cursor_theme}\n"
+            f"gtk-cursor-theme-size = {cursor_size}\n"
+            f"gtk-decoration-layout = {button_layout}\n"
+            f"gtk-application-prefer-dark-theme = {'1' if mode == 'dark' else '0'}\n"
+            f"gtk-font-name = Ubuntu 10\n"
+        )
+        (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk4_ini_content)
+        log("Updated GTK 3.0 and GTK 4.0 settings.ini with decoration layout and cursor settings.")
 
         # 4. Shadow cursor to ~/.icons for Flatpaks, write default index.theme & update xrdb
         if cursor_theme:
@@ -550,17 +569,31 @@ class ThemeManager:
             self.update_xresources_cursor(cursor_theme, cursor_size, log)
 
         # Sync GTK 3 & GTK 4 settings.ini so sandboxed apps read the current cursor & theme
-        gtk_ini_content = (
+        button_layout = self.get_gsetting("org.cinnamon.desktop.wm.preferences", "button-layout") or ":minimize,maximize,close"
+        gtk3_ini_content = (
             f"[Settings]\n"
             f"gtk-theme-name = {gtk_theme}\n"
             f"gtk-icon-theme-name = {icon_theme}\n"
             f"gtk-cursor-theme-name = {cursor_theme}\n"
             f"gtk-cursor-theme-size = {cursor_size}\n"
+            f"gtk-decoration-layout = {button_layout}\n"
             f"gtk-application-prefer-dark-theme = 1\n"
             f"gtk-font-name = Ubuntu 10\n"
         )
-        (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk_ini_content)
-        (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk_ini_content)
+        (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk3_ini_content)
+
+        # For GTK 4 / Libadwaita: only set cursor, icons, and decoration layout in settings.ini.
+        # Setting gtk-theme-name to a GTK3 theme strips Libadwaita button styling and breaks headerbars.
+        gtk4_ini_content = (
+            f"[Settings]\n"
+            f"gtk-icon-theme-name = {icon_theme}\n"
+            f"gtk-cursor-theme-name = {cursor_theme}\n"
+            f"gtk-cursor-theme-size = {cursor_size}\n"
+            f"gtk-decoration-layout = {button_layout}\n"
+            f"gtk-application-prefer-dark-theme = 1\n"
+            f"gtk-font-name = Ubuntu 10\n"
+        )
+        (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk4_ini_content)
         log("Synchronized ~/.config/gtk-3.0/settings.ini and gtk-4.0/settings.ini.")
 
         # Filesystem permissions
@@ -576,10 +609,12 @@ class ThemeManager:
         for rule in fs_rules:
             cmd.append(f"--filesystem={rule}")
 
-        # Environment variables
+        # Explicitly unset dangerous GTK_THEME and ICON_THEME environment variables.
+        # Exporting GTK_THEME globally breaks Libadwaita/GTK4 Flatpaks (stripping button styling
+        # and destroying window headerbars). GTK3 themes are read from settings.ini and GTK4 from gtk.css.
         cmd.extend([
-            f"--env=GTK_THEME={gtk_theme}",
-            f"--env=ICON_THEME={icon_theme}",
+            "--unset-env=GTK_THEME",
+            "--unset-env=ICON_THEME",
             f"--env=XCURSOR_THEME={cursor_theme}",
             f"--env=XCURSOR_SIZE={cursor_size}",
             "--env=QT_QPA_PLATFORMTHEME=qt5ct"
@@ -590,6 +625,15 @@ class ThemeManager:
             log("Flatpak user overrides configured successfully.")
         else:
             log(f"Flatpak override notice: {out}")
+
+        # Clean any empty GTK_THEME= / ICON_THEME= lines from the flatpak override file
+        override_file = HOME / ".local" / "share" / "flatpak" / "overrides" / "global"
+        if override_file.exists():
+            try:
+                lines = [l for l in override_file.read_text().splitlines() if not l.startswith(("GTK_THEME=", "ICON_THEME="))]
+                override_file.write_text("\n".join(lines) + "\n")
+            except Exception:
+                pass
 
     def fallback_to_default(self, log: Callable[[str], None] = lambda m: None) -> bool:
         """Trigger safe fallback to default Linux Mint theming (Mint-Y-Dark)."""
@@ -619,17 +663,29 @@ class ThemeManager:
         self.set_gsetting("org.gnome.desktop.interface", "color-scheme", "prefer-dark")
 
         # 2. Reset ~/.config/gtk-3.0/settings.ini & gtk-4.0/settings.ini
-        gtk_content = (
+        button_layout = self.get_gsetting("org.cinnamon.desktop.wm.preferences", "button-layout") or ":minimize,maximize,close"
+        gtk3_content = (
             f"[Settings]\n"
             f"gtk-theme-name = {default_theme}\n"
             f"gtk-icon-theme-name = {default_icon}\n"
             f"gtk-cursor-theme-name = {default_cursor}\n"
             f"gtk-cursor-theme-size = 24\n"
+            f"gtk-decoration-layout = {button_layout}\n"
             f"gtk-application-prefer-dark-theme = 1\n"
             f"gtk-font-name = Ubuntu 10\n"
         )
-        (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk_content)
-        (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk_content)
+        (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk3_content)
+
+        gtk4_content = (
+            f"[Settings]\n"
+            f"gtk-icon-theme-name = {default_icon}\n"
+            f"gtk-cursor-theme-name = {default_cursor}\n"
+            f"gtk-cursor-theme-size = 24\n"
+            f"gtk-decoration-layout = {button_layout}\n"
+            f"gtk-application-prefer-dark-theme = 1\n"
+            f"gtk-font-name = Ubuntu 10\n"
+        )
+        (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk4_content)
 
         # 3. Clean GTK 4 symlinks so Libadwaita reverts to pure default
         for link in [GTK4_CONFIG_DIR / "gtk.css", GTK4_CONFIG_DIR / "gtk-dark.css", GTK4_CONFIG_DIR / "assets"]:

@@ -44,7 +44,8 @@ Modern Linux desktops — particularly Linux Mint Cinnamon running a mixture of 
 - **Zero Pip Dependencies**: Built strictly using Python's standard library (`curses`, `subprocess`, `urllib`, `tarfile`, `zipfile`). Runs natively on stock Linux Mint without setting up virtual environments or installing pip packages.
 - **Dynamic Virtual Scrolling**: Effortlessly browses long lists of theme suites with automatic viewport scrolling, position indicators, and support for `↑`/`↓`, `Page Up`, `Page Down`, `Home`, and `End`.
 - **Complete Libadwaita Alignment**: Automatically symlinks theme `gtk-4.0` stylesheets and synchronizes desktop portal `color-scheme` preferences (`prefer-dark` / `prefer-light`).
-- **Comprehensive Flatpak Overrides**: Automatically grants read-only container access to host themes (`xdg-data/themes`, `~/.themes`, `~/.icons`, `xdg-config/gtk-4.0`) and exports `GTK_THEME`, `ICON_THEME`, `XCURSOR_THEME`, `XCURSOR_SIZE`, and `QT_QPA_PLATFORMTHEME`.
+- **Comprehensive Flatpak Overrides**: Automatically grants read-only container access to host themes (`xdg-data/themes`, `~/.themes`, `~/.icons`, `xdg-config/gtk-3.0`, `xdg-config/gtk-4.0`), exports `XCURSOR_THEME`, `XCURSOR_SIZE`, and `QT_QPA_PLATFORMTHEME`, and safely prevents `GTK_THEME` environment collisions that break modern Libadwaita apps.
+- **Window Controls & Layout Alignment**: Automatically propagates Cinnamon's window titlebar button layout (`:minimize,maximize,close`) into both GTK 3 and GTK 4 `settings.ini` so sandboxed Flatpak apps never lose their headerbars, minimize, maximize, or close buttons.
 - **System-Wide Cursor Synchronization**: Keeps cursor themes uniform across Cinnamon GSettings, GNOME GSettings, GTK3 INI, X11 root window, and Flatpaks.
 - **Instant Safety Fallback (`[b]`)**: Press `b` at any time to instantly restore stock `Mint-Y-Dark`, default `Mint-Y` icons, and `Bibata-Modern-Classic` cursors while safely clearing any active overrides.
 - **Automated Error Recovery**: If any upstream theme download or compilation fails, the system automatically catches the failure and reverts safely to `Mint-Y-Dark` so the desktop is never left in a broken state.
@@ -153,14 +154,15 @@ When you apply a theme, `cinna-theme` automates the following steps:
    - `gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"`
    - Links `<theme_path>/gtk-4.0/gtk.css` and `assets` to `~/.config/gtk-4.0/`.
 3. **GTK 3 & GTK 4 Settings Files**:
-   - Generates and synchronizes both `~/.config/gtk-3.0/settings.ini` and `~/.config/gtk-4.0/settings.ini` with theme, icon, and cursor definitions (`gtk-cursor-theme-name`, `gtk-cursor-theme-size`).
+   - Generates and synchronizes both `~/.config/gtk-3.0/settings.ini` and `~/.config/gtk-4.0/settings.ini` with cursor definitions (`gtk-cursor-theme-name`, `gtk-cursor-theme-size`) and window controls layout (`gtk-decoration-layout = :minimize,maximize,close`).
+   - Keeps `gtk-theme-name` for GTK 3 while ensuring GTK 4 / Libadwaita retains its native stylesheet engine (styling customized cleanly via `gtk.css`), avoiding stripped buttons and corrupted headerbars.
 4. **User-Space Cursor Shadowing & X11 Sync**:
    - **User-Space Shadowing**: Flatpak sandboxes cannot access `/usr/share/icons/` from the host. `cinna-theme` automatically detects and shadows host system cursor themes into `~/.icons/<theme>` so sandboxed apps have direct read access.
    - **X11 Resources (`xrdb`)**: Merges `Xcursor.theme` and `Xcursor.size` dynamically into the active X11 server via `xrdb -merge` and updates `~/.Xresources`.
    - **Root Window**: Updates `~/.icons/default/index.theme` so legacy, root-level, and desktop boundary windows inherit the cursor.
 5. **Flatpak Sandbox Overrides**:
    - Grants read-only filesystem permissions for themes, icons, and GTK 3/4 configurations (`xdg-data/themes`, `xdg-data/icons`, `~/.themes`, `~/.icons`, `xdg-config/gtk-3.0`, `xdg-config/gtk-4.0`).
-   - Sets environment variables: `GTK_THEME`, `ICON_THEME`, `XCURSOR_THEME`, `XCURSOR_SIZE`, and `QT_QPA_PLATFORMTHEME=qt5ct`.
+   - Explicitly avoids global `GTK_THEME` environment injection (which crashes Libadwaita's style engine into bare unstyled text), while setting `XCURSOR_THEME`, `XCURSOR_SIZE`, and `QT_QPA_PLATFORMTHEME=qt5ct`.
 
 ---
 

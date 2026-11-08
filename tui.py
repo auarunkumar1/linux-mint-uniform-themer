@@ -319,8 +319,8 @@ class CinnamonThemeTUI:
 
             ("3. Flatpak Sandboxing Resolution",
              "Flatpaks cannot access ~/.themes or ~/.icons unless explicitly permitted.\n"
-             "This tool sets global user overrides granting read-only access to host theme dirs\n"
-             "and passes GTK_THEME, ICON_THEME, and XCURSOR_THEME into the sandbox.")
+             "This tool sets global user overrides granting read-only access to host theme dirs,\n"
+             "synchronizes window button layouts and cursors, and aligns Libadwaita stylesheets.")
         ]
 
         y = start_y + 2
