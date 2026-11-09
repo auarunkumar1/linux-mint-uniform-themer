@@ -104,6 +104,7 @@ cinna-theme
 | `Home` / `End` | Jump directly to the top or bottom of the preset list |
 | `Tab` or `←` / `→` | Switch tabs (*Curated Suites*, *Custom Components*, *Flatpak & Libadwaita*, *Help*) |
 | `Enter` | 1-Click download (if needed) and apply system-wide |
+| `f` | **Toggle Font Anti-Blur**: Toggles subpixel RGB rendering & Flatpak Ozone flags |
 | `b` | **Emergency Safety Fallback**: Instantly restores `Mint-Y-Dark` system-wide |
 | `s` | Force re-sync Flatpak sandboxes to active host theme |
 | `r` | Refresh live desktop & sandbox status |
@@ -114,8 +115,14 @@ cinna-theme
 ### 2. CLI Mode (For Scripts & Quick Actions)
 
 ```bash
-# Check current system-wide theme, cursor, and Flatpak status
+# Check current system-wide theme, cursor, and Flatpak status (with blurriness warning)
 cinna-theme --status
+
+# Fix Flatpak text blurriness (Enforce subpixel RGB & High-DPI fontconfig)
+cinna-theme --fix-blur
+
+# Toggle subpixel font anti-blur and Flatpak overrides on/off
+cinna-theme --toggle-antiblur
 
 # List all available presets with installation status
 cinna-theme --list
