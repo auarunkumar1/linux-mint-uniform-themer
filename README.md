@@ -156,13 +156,39 @@ When you apply a theme, `cinna-theme` automates the following steps:
 3. **GTK 3 & GTK 4 Settings Files**:
    - Generates and synchronizes both `~/.config/gtk-3.0/settings.ini` and `~/.config/gtk-4.0/settings.ini` with cursor definitions (`gtk-cursor-theme-name`, `gtk-cursor-theme-size`) and window controls layout (`gtk-decoration-layout = :minimize,maximize,close`).
    - Keeps `gtk-theme-name` for GTK 3 while ensuring GTK 4 / Libadwaita retains its native stylesheet engine (styling customized cleanly via `gtk.css`), avoiding stripped buttons and corrupted headerbars.
-4. **User-Space Cursor Shadowing & X11 Sync**:
-   - **User-Space Shadowing**: Flatpak sandboxes cannot access `/usr/share/icons/` from the host. `cinna-theme` automatically detects and shadows host system cursor themes into `~/.icons/<theme>` so sandboxed apps have direct read access.
+4. **User-Space Theme & Cursor Shadowing + X11 Sync**:
+   - **Theme & Cursor Shadowing**: Flatpak sandboxes cannot access `/usr/share/themes/` or `/usr/share/icons/` from the host because the `/usr` hierarchy is reserved by Flatpak runtimes. `cinna-theme` automatically detects when the active desktop theme or cursor pack resides in `/usr/share/` and shadows it into `~/.themes/<theme>` and `~/.icons/<cursor>` so all sandboxed applications have direct filesystem access.
    - **X11 Resources (`xrdb`)**: Merges `Xcursor.theme` and `Xcursor.size` dynamically into the active X11 server via `xrdb -merge` and updates `~/.Xresources`.
    - **Root Window**: Updates `~/.icons/default/index.theme` so legacy, root-level, and desktop boundary windows inherit the cursor.
 5. **Flatpak Sandbox Overrides**:
    - Grants read-only filesystem permissions for themes, icons, and GTK 3/4 configurations (`xdg-data/themes`, `xdg-data/icons`, `~/.themes`, `~/.icons`, `xdg-config/gtk-3.0`, `xdg-config/gtk-4.0`).
    - Explicitly avoids global `GTK_THEME` environment injection (which crashes Libadwaita's style engine into bare unstyled text), while setting `XCURSOR_THEME`, `XCURSOR_SIZE`, and `QT_QPA_PLATFORMTHEME=qt5ct`.
+
+---
+
+## Deep Dive: Solving Linux Theming & Sandbox Fragmentation
+
+### 1. The Broken Headerbars & Stripped Unstyled Text (The `GTK_THEME` Trap)
+* **The Issue**: A common workaround in customization scripts is forcing themes onto Flatpaks via `--env=GTK_THEME=<theme_name>`.
+* **Why It Fails**: Modern Flatpak apps (e.g., Flatseal, Bottles, EasyEffects, Amberol, TubeConverter) are built using **GTK 4 and Libadwaita**. Libadwaita explicitly bypasses legacy GTK 3 theme engines and relies on its own internal Adwaita stylesheet. When `GTK_THEME` is passed via the environment, GTK 4 attempts to load that theme name. Because Flatpak runtimes do not contain host system themes (and legacy GTK 3 themes lack GTK 4 CSS rules), **GTK 4's CSS parser crashes and falls back to a raw unstyled skeleton**:
+  - Window headerbars fail to render or disappear completely.
+  - Buttons lose all background fills, borders, and padding, rendering as bare unstyled text.
+* **The Solution in `cinna-theme`**: Global user overrides explicitly unset `GTK_THEME` and `ICON_THEME`. GTK 3 applications read the theme safely through `~/.config/gtk-3.0/settings.ini`, while GTK 4 / Libadwaita apps load custom styling gracefully via `~/.config/gtk-4.0/gtk.css` without breaking their core styling engine.
+
+### 2. Restoring Window Controls (`gtk-decoration-layout`)
+* **The Issue**: Sandboxed GTK 4 / Libadwaita apps running under Linux Mint Cinnamon often lose their minimize and maximize buttons, leaving only a close button or no controls at all.
+* **Why It Fails**: Cinnamon uses `:minimize,maximize,close` for window controls, but `xdg-desktop-portal-xapp` and `xdg-desktop-portal-gtk` do not always broadcast GNOME Shell window manager preferences into Flatpak containers.
+* **The Solution in `cinna-theme`**: Automatically queries Cinnamon's active button layout from `org.cinnamon.desktop.wm.preferences button-layout` and injects `gtk-decoration-layout = :minimize,maximize,close` into both `~/.config/gtk-3.0/settings.ini` and `~/.config/gtk-4.0/settings.ini`.
+
+### 3. The `/usr/share` Sandbox Barrier (Theme & Cursor Shadowing)
+* **The Issue**: Flatpaks ignore host cursor themes and system themes like `Mint-Y-Dark`, defaulting to white X11 cursors or standard Adwaita.
+* **Why It Fails**: Flatpak explicitly forbids sharing `/usr/share/themes` or `/usr/share/icons` with sandboxes (`Path "/usr" is reserved by Flatpak`).
+* **The Solution in `cinna-theme`**: Automatically shadows system themes and cursors from `/usr/share/` into user space (`~/.themes` and `~/.icons`). Because Flatpak overrides grant read-only access to user directories (`~/.themes:ro` and `~/.icons:ro`), sandboxed apps immediately gain access to the complete theme and cursor assets.
+
+### 4. CEF, Electron, and Web Apps (e.g., Readest, Brave, VSCodium)
+* **The Issue**: Applications like Readest, Spotify, or VSCodium may stay in light mode even when the desktop is dark.
+* **Why It Happens**: These applications use Chromium Embedded Framework (CEF) or Electron, where the main interface is an internal web application rather than GTK widgets. If the application's internal configuration (such as Readest's `globalViewSettings.theme`) is hardcoded to `"light"`, it overrides the system appearance portal.
+* **The Solution**: Ensure the system portal provides `color-scheme = 1` (dark), shadow the GTK 3 theme so CEF's file dialogs match, and set the application's internal appearance toggle to `"auto"` or `"dark"`.
 
 ---
 
