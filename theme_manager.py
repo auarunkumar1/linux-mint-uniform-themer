@@ -817,68 +817,73 @@ class ThemeManager:
 
         # Window Controls Visibility & Styling for GTK 4 / Libadwaita Flatpaks
         lines.append("""
-/* === Uniform Colored Window Controls (Traffic Lights) for GTK 4 / Libadwaita === */
+/* === Perfect 1:1 Circular Window Controls (Traffic Lights) === */
 headerbar windowcontrols,
 windowcontrols {
-  border-spacing: 0;
+  border-spacing: 6px;
 }
 
 headerbar windowcontrols button,
-windowcontrols button {
+windowcontrols button,
+headerbar windowcontrols button.close,
+windowcontrols button.close,
+headerbar windowcontrols button.maximize,
+windowcontrols button.maximize,
+headerbar windowcontrols button.minimize,
+windowcontrols button.minimize {
+  background-color: transparent;
   background-image: none;
+  box-shadow: none;
+  border: none;
+  padding: 0;
+  margin: 0 2px;
   min-width: 14px;
   min-height: 14px;
+}
+
+headerbar windowcontrols button > image,
+windowcontrols button > image {
+  background-color: transparent;
+  background-image: none;
   border-radius: 9999px;
+  min-width: 14px;
+  min-height: 14px;
   padding: 0;
-  margin: 0 4px;
-  opacity: 1;
+  margin: 0;
   border: 1px solid alpha(currentColor, 0.15);
+  color: transparent;
+  -gtk-icon-size: 10px;
   transition: all 120ms ease-in-out;
 }
 
-headerbar windowcontrols button.close,
-windowcontrols button.close {
+headerbar windowcontrols button.close > image,
+windowcontrols button.close > image {
   background-color: @destructive_bg_color;
-  color: alpha(@window_bg_color, 0.9);
 }
 
-headerbar windowcontrols button.maximize,
-windowcontrols button.maximize {
+headerbar windowcontrols button.maximize > image,
+windowcontrols button.maximize > image {
   background-color: @success_bg_color;
-  color: alpha(@window_bg_color, 0.9);
 }
 
-headerbar windowcontrols button.minimize,
-windowcontrols button.minimize {
+headerbar windowcontrols button.minimize > image,
+windowcontrols button.minimize > image {
   background-color: @warning_bg_color;
-  color: alpha(@window_bg_color, 0.9);
 }
 
-headerbar windowcontrols button image,
-windowcontrols button image {
-  color: inherit;
-  opacity: 0;
-  -gtk-icon-size: 10px;
-  transition: opacity 120ms ease-in-out;
-}
-
-headerbar windowcontrols button:hover image,
-windowcontrols button:hover image {
-  opacity: 0.85;
-}
-
-headerbar windowcontrols button:hover,
-windowcontrols button:hover {
+headerbar windowcontrols button:hover > image,
+windowcontrols button:hover > image {
+  color: alpha(@window_bg_color, 0.95);
   filter: brightness(1.15);
 }
 
-headerbar windowcontrols button:active,
-windowcontrols button:active {
+headerbar windowcontrols button:active > image,
+windowcontrols button:active > image {
   filter: brightness(0.85);
 }
 
-headerbar windowcontrols button:backdrop,
-windowcontrols button:backdrop {
+headerbar windowcontrols button:backdrop > image,
+windowcontrols button:backdrop > image {
   opacity: 0.55;
   filter: grayscale(0.4);
 }
@@ -910,18 +915,20 @@ windowcontrols button:backdrop {
         if gtk4_css_src:
             # Check if Libadwaita color variables or windowcontrols fixes are present
             css_sample = (gtk4_css_src / "gtk.css").read_text()
-            if "window_bg_color" not in css_sample or "Window Controls Visibility" not in css_sample:
-                log(f"Injecting Libadwaita compatibility styling into '{gtk_theme}' for Flatpak/GTK4...")
-                palette_block = self.get_libadwaita_palette(gtk_theme, mode, css_sample)
-                for f_name in ["gtk.css", "gtk-dark.css"]:
-                    target_file = gtk4_css_src / f_name
-                    if target_file.exists():
-                        try:
-                            content = target_file.read_text()
-                            if "Window Controls Visibility" not in content:
-                                target_file.write_text(content + palette_block)
-                        except Exception as e:
-                            log(f"Note: Could not patch {f_name}: {e}")
+            marker = "/* === Libadwaita Compatibility Palette"
+            palette_block = self.get_libadwaita_palette(gtk_theme, mode, css_sample)
+            for f_name in ["gtk.css", "gtk-dark.css"]:
+                target_file = gtk4_css_src / f_name
+                if target_file.exists():
+                    try:
+                        content = target_file.read_text()
+                        if marker in content:
+                            base_content = content.split(marker)[0].rstrip()
+                            target_file.write_text((base_content + "\n\n" if base_content else "") + palette_block)
+                        elif "window_bg_color" not in content or "Perfect 1:1 Circular Window Controls" not in content:
+                            target_file.write_text(content.rstrip() + "\n\n" + palette_block)
+                    except Exception as e:
+                        log(f"Note: Could not patch {f_name}: {e}")
 
             log(f"Linking GTK 4 stylesheet from {gtk4_css_src} for Libadwaita consistency...")
             try:
