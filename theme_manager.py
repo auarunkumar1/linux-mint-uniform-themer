@@ -547,8 +547,272 @@ class ThemeManager:
         log("Uniform theming & cursors applied successfully!")
         return True
 
+    def get_libadwaita_palette(self, theme_name: str, mode: str = "dark", css_content: str = "") -> str:
+        """Generate Libadwaita color definitions for themes lacking modern @define-color window_bg_color."""
+        normalized = theme_name.lower().replace("-v40", "").replace("-v42", "")
+
+        palettes = {
+            "nordic": {
+                "accent_bg_color": "#88c0d0",
+                "accent_fg_color": "#2e3440",
+                "accent_color": "#88c0d0",
+                "destructive_bg_color": "#bf616a",
+                "destructive_fg_color": "#eceff4",
+                "destructive_color": "#bf616a",
+                "success_bg_color": "#a3be8c",
+                "success_fg_color": "#2e3440",
+                "success_color": "#a3be8c",
+                "warning_bg_color": "#ebcb8b",
+                "warning_fg_color": "#2e3440",
+                "warning_color": "#ebcb8b",
+                "error_bg_color": "#bf616a",
+                "error_fg_color": "#eceff4",
+                "error_color": "#bf616a",
+                "window_bg_color": "#2e3440",
+                "window_fg_color": "#eceff4",
+                "view_bg_color": "#242933",
+                "view_fg_color": "#eceff4",
+                "headerbar_bg_color": "#2e3440",
+                "headerbar_fg_color": "#eceff4",
+                "headerbar_border_color": "rgba(236, 239, 244, 0.12)",
+                "headerbar_backdrop_color": "#2e3440",
+                "card_bg_color": "#3b4252",
+                "card_fg_color": "#eceff4",
+                "dialog_bg_color": "#2e3440",
+                "dialog_fg_color": "#eceff4",
+                "popover_bg_color": "#353c4a",
+                "popover_fg_color": "#eceff4",
+                "shade_color": "rgba(0, 0, 0, 0.25)",
+                "scrollbar_outline_color": "rgba(216, 222, 233, 0.15)",
+            },
+            "nordic-polar": {
+                "accent_bg_color": "#5e81ac",
+                "accent_fg_color": "#ffffff",
+                "accent_color": "#5e81ac",
+                "destructive_bg_color": "#bf616a",
+                "destructive_fg_color": "#ffffff",
+                "destructive_color": "#bf616a",
+                "success_bg_color": "#a3be8c",
+                "success_fg_color": "#ffffff",
+                "success_color": "#a3be8c",
+                "warning_bg_color": "#ebcb8b",
+                "warning_fg_color": "#2e3440",
+                "warning_color": "#ebcb8b",
+                "error_bg_color": "#bf616a",
+                "error_fg_color": "#ffffff",
+                "error_color": "#bf616a",
+                "window_bg_color": "#e5e9f0",
+                "window_fg_color": "#2e3440",
+                "view_bg_color": "#eceff4",
+                "view_fg_color": "#2e3440",
+                "headerbar_bg_color": "#d8dee9",
+                "headerbar_fg_color": "#2e3440",
+                "headerbar_border_color": "rgba(46, 52, 64, 0.12)",
+                "headerbar_backdrop_color": "#d8dee9",
+                "card_bg_color": "#d8dee9",
+                "card_fg_color": "#2e3440",
+                "dialog_bg_color": "#e5e9f0",
+                "dialog_fg_color": "#2e3440",
+                "popover_bg_color": "#d8dee9",
+                "popover_fg_color": "#2e3440",
+                "shade_color": "rgba(0, 0, 0, 0.08)",
+                "scrollbar_outline_color": "rgba(46, 52, 64, 0.15)",
+            },
+            "dracula": {
+                "accent_bg_color": "#bd93f9",
+                "accent_fg_color": "#282a36",
+                "accent_color": "#bd93f9",
+                "destructive_bg_color": "#ff5555",
+                "destructive_fg_color": "#f8f8f2",
+                "destructive_color": "#ff5555",
+                "success_bg_color": "#50fa7b",
+                "success_fg_color": "#282a36",
+                "success_color": "#50fa7b",
+                "warning_bg_color": "#ffb86c",
+                "warning_fg_color": "#282a36",
+                "warning_color": "#ffb86c",
+                "error_bg_color": "#ff5555",
+                "error_fg_color": "#f8f8f2",
+                "error_color": "#ff5555",
+                "window_bg_color": "#282a36",
+                "window_fg_color": "#f8f8f2",
+                "view_bg_color": "#21222c",
+                "view_fg_color": "#f8f8f2",
+                "headerbar_bg_color": "#282a36",
+                "headerbar_fg_color": "#f8f8f2",
+                "headerbar_border_color": "rgba(248, 248, 242, 0.12)",
+                "headerbar_backdrop_color": "#282a36",
+                "card_bg_color": "#343746",
+                "card_fg_color": "#f8f8f2",
+                "dialog_bg_color": "#282a36",
+                "dialog_fg_color": "#f8f8f2",
+                "popover_bg_color": "#343746",
+                "popover_fg_color": "#f8f8f2",
+                "shade_color": "rgba(0, 0, 0, 0.35)",
+                "scrollbar_outline_color": "rgba(248, 248, 242, 0.12)",
+            },
+            "sweet-dark": {
+                "accent_bg_color": "#00e8c6",
+                "accent_fg_color": "#161925",
+                "accent_color": "#00e8c6",
+                "destructive_bg_color": "#f92672",
+                "destructive_fg_color": "#ffffff",
+                "destructive_color": "#f92672",
+                "success_bg_color": "#00e8c6",
+                "success_fg_color": "#161925",
+                "success_color": "#00e8c6",
+                "warning_bg_color": "#f39c12",
+                "warning_fg_color": "#161925",
+                "warning_color": "#f39c12",
+                "error_bg_color": "#f92672",
+                "error_fg_color": "#ffffff",
+                "error_color": "#f92672",
+                "window_bg_color": "#161925",
+                "window_fg_color": "#fcfcfc",
+                "view_bg_color": "#11121d",
+                "view_fg_color": "#fcfcfc",
+                "headerbar_bg_color": "#161925",
+                "headerbar_fg_color": "#fcfcfc",
+                "headerbar_border_color": "rgba(252, 252, 252, 0.12)",
+                "headerbar_backdrop_color": "#161925",
+                "card_bg_color": "#1e2233",
+                "card_fg_color": "#fcfcfc",
+                "dialog_bg_color": "#161925",
+                "dialog_fg_color": "#fcfcfc",
+                "popover_bg_color": "#1e2233",
+                "popover_fg_color": "#fcfcfc",
+                "shade_color": "rgba(0, 0, 0, 0.35)",
+                "scrollbar_outline_color": "rgba(252, 252, 252, 0.15)",
+            },
+            "mint-y-dark": {
+                "accent_bg_color": "#35a854",
+                "accent_fg_color": "#ffffff",
+                "accent_color": "#35a854",
+                "destructive_bg_color": "#c6262e",
+                "destructive_fg_color": "#ffffff",
+                "destructive_color": "#c6262e",
+                "success_bg_color": "#35a854",
+                "success_fg_color": "#ffffff",
+                "success_color": "#35a854",
+                "warning_bg_color": "#f37329",
+                "warning_fg_color": "#ffffff",
+                "warning_color": "#f37329",
+                "error_bg_color": "#c6262e",
+                "error_fg_color": "#ffffff",
+                "error_color": "#c6262e",
+                "window_bg_color": "#2f2f2f",
+                "window_fg_color": "#ffffff",
+                "view_bg_color": "#252525",
+                "view_fg_color": "#ffffff",
+                "headerbar_bg_color": "#2f2f2f",
+                "headerbar_fg_color": "#ffffff",
+                "headerbar_border_color": "rgba(255, 255, 255, 0.1)",
+                "headerbar_backdrop_color": "#2f2f2f",
+                "card_bg_color": "#383838",
+                "card_fg_color": "#ffffff",
+                "dialog_bg_color": "#2f2f2f",
+                "dialog_fg_color": "#ffffff",
+                "popover_bg_color": "#383838",
+                "popover_fg_color": "#ffffff",
+                "shade_color": "rgba(0, 0, 0, 0.25)",
+                "scrollbar_outline_color": "rgba(255, 255, 255, 0.15)",
+            },
+            "mint-y": {
+                "accent_bg_color": "#35a854",
+                "accent_fg_color": "#ffffff",
+                "accent_color": "#35a854",
+                "destructive_bg_color": "#c6262e",
+                "destructive_fg_color": "#ffffff",
+                "destructive_color": "#c6262e",
+                "success_bg_color": "#35a854",
+                "success_fg_color": "#ffffff",
+                "success_color": "#35a854",
+                "warning_bg_color": "#f37329",
+                "warning_fg_color": "#ffffff",
+                "warning_color": "#f37329",
+                "error_bg_color": "#c6262e",
+                "error_fg_color": "#ffffff",
+                "error_color": "#c6262e",
+                "window_bg_color": "#f8f8f8",
+                "window_fg_color": "#2f2f2f",
+                "view_bg_color": "#ffffff",
+                "view_fg_color": "#2f2f2f",
+                "headerbar_bg_color": "#f0f0f0",
+                "headerbar_fg_color": "#2f2f2f",
+                "headerbar_border_color": "rgba(0, 0, 0, 0.1)",
+                "headerbar_backdrop_color": "#f0f0f0",
+                "card_bg_color": "#ffffff",
+                "card_fg_color": "#2f2f2f",
+                "dialog_bg_color": "#f8f8f8",
+                "dialog_fg_color": "#2f2f2f",
+                "popover_bg_color": "#ffffff",
+                "popover_fg_color": "#2f2f2f",
+                "shade_color": "rgba(0, 0, 0, 0.08)",
+                "scrollbar_outline_color": "rgba(0, 0, 0, 0.15)",
+            }
+        }
+
+        # Check curated palette match
+        matched_palette = None
+        for key, p in palettes.items():
+            if key in normalized:
+                matched_palette = p
+                break
+
+        if not matched_palette:
+            import re
+            def extract(pattern, default):
+                m = re.search(pattern, css_content)
+                return m.group(1).strip() if m else default
+
+            is_dark = (mode == "dark")
+            win_bg = extract(r"@define-color\s+(?:theme_)?bg_color\s+([^;]+);", "#2f2f2f" if is_dark else "#f8f8f8")
+            win_fg = extract(r"@define-color\s+(?:theme_)?fg_color\s+([^;]+);", "#ffffff" if is_dark else "#2e3440")
+            accent = extract(r"@define-color\s+(?:theme_)?selected_bg_color\s+([^;]+);", "#3584e4")
+            view_bg = extract(r"@define-color\s+(?:theme_)?base_color\s+([^;]+);", "#242424" if is_dark else "#ffffff")
+
+            matched_palette = {
+                "accent_bg_color": accent,
+                "accent_fg_color": "#ffffff" if is_dark else "#2e3440",
+                "accent_color": accent,
+                "destructive_bg_color": "#c6262e",
+                "destructive_fg_color": "#ffffff",
+                "destructive_color": "#c6262e",
+                "success_bg_color": "#35a854",
+                "success_fg_color": "#ffffff",
+                "success_color": "#35a854",
+                "warning_bg_color": "#f37329",
+                "warning_fg_color": "#ffffff",
+                "warning_color": "#f37329",
+                "error_bg_color": "#c6262e",
+                "error_fg_color": "#ffffff",
+                "error_color": "#c6262e",
+                "window_bg_color": win_bg,
+                "window_fg_color": win_fg,
+                "view_bg_color": view_bg,
+                "view_fg_color": win_fg,
+                "headerbar_bg_color": win_bg,
+                "headerbar_fg_color": win_fg,
+                "headerbar_border_color": "rgba(255, 255, 255, 0.12)" if is_dark else "rgba(0, 0, 0, 0.1)",
+                "headerbar_backdrop_color": win_bg,
+                "card_bg_color": view_bg,
+                "card_fg_color": win_fg,
+                "dialog_bg_color": win_bg,
+                "dialog_fg_color": win_fg,
+                "popover_bg_color": view_bg,
+                "popover_fg_color": win_fg,
+                "shade_color": "rgba(0, 0, 0, 0.25)" if is_dark else "rgba(0, 0, 0, 0.08)",
+                "scrollbar_outline_color": "rgba(255, 255, 255, 0.15)" if is_dark else "rgba(0, 0, 0, 0.15)",
+            }
+
+        lines = ["\n/* === Libadwaita Compatibility Palette (Generated by cinna-theme) === */"]
+        for k, v in matched_palette.items():
+            lines.append(f"@define-color {k} {v};")
+        return "\n".join(lines) + "\n"
+
     def _apply_gtk4_override(self, gtk_theme: str, mode: str, log: Callable[[str], None]):
-        """Symlink GTK 4 CSS from the active theme to ~/.config/gtk-4.0 so Libadwaita inherits it."""
+        """Symlink GTK 4 CSS from the active theme to ~/.config/gtk-4.0 with Libadwaita variable injection."""
+        self.ensure_theme_in_user_space(gtk_theme, log)
         theme_path = self.find_theme_path(gtk_theme)
         gtk4_css_src = None
 
@@ -561,14 +825,29 @@ class ThemeManager:
         target_dark_css = GTK4_CONFIG_DIR / "gtk-dark.css"
         target_assets = GTK4_CONFIG_DIR / "assets"
 
-        # Remove existing symlinks
+        # Remove existing symlinks or files
         for link in [target_css, target_dark_css, target_assets]:
-            if link.is_symlink():
+            if link.is_symlink() or link.is_file():
                 link.unlink()
             elif link.is_dir() and link.name == "assets":
                 shutil.rmtree(link)
 
         if gtk4_css_src:
+            # Check if Libadwaita color variables are present
+            css_sample = (gtk4_css_src / "gtk.css").read_text()
+            if "window_bg_color" not in css_sample:
+                log(f"Injecting Libadwaita color variables into '{gtk_theme}' for Flatpak/GTK4 compatibility...")
+                palette_block = self.get_libadwaita_palette(gtk_theme, mode, css_sample)
+                for f_name in ["gtk.css", "gtk-dark.css"]:
+                    target_file = gtk4_css_src / f_name
+                    if target_file.exists():
+                        try:
+                            content = target_file.read_text()
+                            if "window_bg_color" not in content:
+                                target_file.write_text(content + palette_block)
+                        except Exception as e:
+                            log(f"Note: Could not patch {f_name}: {e}")
+
             log(f"Linking GTK 4 stylesheet from {gtk4_css_src} for Libadwaita consistency...")
             try:
                 target_css.symlink_to(gtk4_css_src / "gtk.css")
@@ -580,7 +859,11 @@ class ThemeManager:
             except Exception as e:
                 log(f"Warning: could not link GTK 4 files: {e}")
         else:
-            log("No custom GTK 4 CSS in theme; default Adwaita engine active.")
+            log(f"Generating fallback Libadwaita palette for '{gtk_theme}'...")
+            palette_block = self.get_libadwaita_palette(gtk_theme, mode, "")
+            target_css.write_text(palette_block)
+            target_dark_css.write_text(palette_block)
+            log("Libadwaita color palette created at ~/.config/gtk-4.0/gtk.css.")
 
     def sync_flatpak_overrides(
         self,
@@ -719,10 +1002,12 @@ class ThemeManager:
         )
         (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk4_content)
 
-        # 3. Clean GTK 4 symlinks so Libadwaita reverts to pure default
+        # 3. Clean GTK 4 symlinks and configs so Libadwaita reverts to pure default
         for link in [GTK4_CONFIG_DIR / "gtk.css", GTK4_CONFIG_DIR / "gtk-dark.css", GTK4_CONFIG_DIR / "assets"]:
-            if link.is_symlink():
+            if link.is_symlink() or link.is_file():
                 link.unlink()
+            elif link.is_dir() and link.name == "assets":
+                shutil.rmtree(link)
 
         # 4. Clean root cursor index.theme & ensure default cursor and theme are in user space
         self.ensure_theme_in_user_space(default_theme, log)
