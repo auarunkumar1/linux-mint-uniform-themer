@@ -487,6 +487,12 @@ class ThemeManager:
         else:
             log(f"Note: '{cinnamon_theme}' does not have a Cinnamon shell theme; retaining active shell.")
 
+        # Window Manager Borders (SSD) Synchronization
+        if theme_path and (theme_path / "metacity-1").exists():
+            self.set_gsetting("org.cinnamon.desktop.wm.preferences", "theme", cinnamon_theme)
+        elif self.find_theme_path(gtk_theme) and (self.find_theme_path(gtk_theme) / "metacity-1").exists():
+            self.set_gsetting("org.cinnamon.desktop.wm.preferences", "theme", gtk_theme)
+
         # 2. GNOME / Portal Desktop Settings
         color_scheme_val = "prefer-dark" if mode == "dark" else "prefer-light"
         self.set_gsetting("org.cinnamon.desktop.interface", "color-scheme", color_scheme_val)
@@ -811,62 +817,70 @@ class ThemeManager:
 
         # Window Controls Visibility & Styling for GTK 4 / Libadwaita Flatpaks
         lines.append("""
-/* === Window Controls Visibility & Styling for GTK 4 / Libadwaita === */
+/* === Uniform Colored Window Controls (Traffic Lights) for GTK 4 / Libadwaita === */
+headerbar windowcontrols,
+windowcontrols {
+  border-spacing: 0;
+}
+
 headerbar windowcontrols button,
 windowcontrols button {
-  color: @headerbar_fg_color;
   background-image: none;
-  background-color: transparent;
-  min-width: 24px;
-  min-height: 24px;
+  min-width: 14px;
+  min-height: 14px;
   border-radius: 9999px;
-  padding: 4px;
-  margin: 0 2px;
+  padding: 0;
+  margin: 0 4px;
   opacity: 1;
+  border: 1px solid alpha(currentColor, 0.15);
+  transition: all 120ms ease-in-out;
 }
 
 headerbar windowcontrols button.close,
 windowcontrols button.close {
-  color: @headerbar_fg_color;
-  background-image: none;
+  background-color: @destructive_bg_color;
+  color: alpha(@window_bg_color, 0.9);
 }
 
 headerbar windowcontrols button.maximize,
 windowcontrols button.maximize {
-  color: @headerbar_fg_color;
-  background-image: none;
+  background-color: @success_bg_color;
+  color: alpha(@window_bg_color, 0.9);
 }
 
 headerbar windowcontrols button.minimize,
 windowcontrols button.minimize {
-  color: @headerbar_fg_color;
-  background-image: none;
-}
-
-headerbar windowcontrols button:hover,
-windowcontrols button:hover {
-  color: @headerbar_fg_color;
-  background-color: alpha(currentColor, 0.15);
-  background-image: none;
-}
-
-headerbar windowcontrols button:active,
-windowcontrols button:active {
-  color: @headerbar_fg_color;
-  background-color: alpha(currentColor, 0.25);
-  background-image: none;
-}
-
-headerbar windowcontrols button:backdrop,
-windowcontrols button:backdrop {
-  color: alpha(@headerbar_fg_color, 0.5);
-  background-image: none;
+  background-color: @warning_bg_color;
+  color: alpha(@window_bg_color, 0.9);
 }
 
 headerbar windowcontrols button image,
 windowcontrols button image {
   color: inherit;
-  opacity: 1;
+  opacity: 0;
+  -gtk-icon-size: 10px;
+  transition: opacity 120ms ease-in-out;
+}
+
+headerbar windowcontrols button:hover image,
+windowcontrols button:hover image {
+  opacity: 0.85;
+}
+
+headerbar windowcontrols button:hover,
+windowcontrols button:hover {
+  filter: brightness(1.15);
+}
+
+headerbar windowcontrols button:active,
+windowcontrols button:active {
+  filter: brightness(0.85);
+}
+
+headerbar windowcontrols button:backdrop,
+windowcontrols button:backdrop {
+  opacity: 0.55;
+  filter: grayscale(0.4);
 }
 """)
         return "\n".join(lines) + "\n"
@@ -1027,6 +1041,7 @@ windowcontrols button image {
         # 1. Restore GSettings for Cinnamon & GNOME
         self.set_gsetting("org.cinnamon.desktop.interface", "gtk-theme", default_theme)
         self.set_gsetting("org.cinnamon.theme", "name", default_theme)
+        self.set_gsetting("org.cinnamon.desktop.wm.preferences", "theme", default_theme)
         self.set_gsetting("org.cinnamon.desktop.interface", "icon-theme", default_icon)
         self.set_gsetting("org.cinnamon.desktop.interface", "cursor-theme", default_cursor)
         self.set_gsetting("org.cinnamon.desktop.interface", "cursor-size", "24")
