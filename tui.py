@@ -146,11 +146,19 @@ class CinnamonThemeTUI:
         fp_color = curses.color_pair(2) if self.status.get("flatpak_fs_synced") else curses.color_pair(4)
         if offset < max_x - 15:
             self.safe_addstr(3, offset, f"[{fp_str}]", fp_color | curses.A_BOLD)
+            offset += len(fp_str) + 3
+
+        # Color badge for Anti-Blur
+        blur_synced = self.status.get("fontconfig_synced", False)
+        blur_str = "Anti-Blur: RGB" if blur_synced else "Anti-Blur: OFF"
+        blur_color = curses.color_pair(2) if blur_synced else curses.color_pair(4)
+        if offset < max_x - 18:
+            self.safe_addstr(3, offset, f"[{blur_str}]", blur_color | curses.A_BOLD)
 
         self.safe_addstr(4, 0, "─" * max_x)
 
     def draw_footer(self, max_y: int, max_x: int):
-        help_text = " [↑/↓] Navigate  [Tab] Switch Tab  [Enter] Apply  [b] Fallback (Mint-Y-Dark)  [s] Sync  [r] Refresh  [q] Quit"
+        help_text = " [↑/↓] Navigate  [Tab] Switch Tab  [Enter] Apply  [f] Toggle Anti-Blur  [b] Fallback  [s] Sync  [q] Quit"
         self.safe_addstr(max_y - 1, 0, help_text.ljust(max_x - 1), curses.color_pair(5))
 
     def render_presets_tab(self, start_y: int, max_y: int, max_x: int):
@@ -290,6 +298,15 @@ class CinnamonThemeTUI:
         else:
             self.safe_addstr(y, 60, "DEFAULT GNOME ADWAITA", curses.color_pair(3))
 
+        # Subpixel Font Anti-Blur
+        y += 2
+        blur_synced = self.status.get("fontconfig_synced", False)
+        self.safe_addstr(y, 4, "Subpixel Font Anti-Blur (LCD & Fontconfig) : ")
+        if blur_synced:
+            self.safe_addstr(y, 52, "SYNCHRONIZED (Subpixel RGB + HintFull)", curses.color_pair(2) | curses.A_BOLD)
+        else:
+            self.safe_addstr(y, 52, "UNCONFIGURED (Grayscale blur fallback)", curses.color_pair(4) | curses.A_BOLD)
+
         y += 2
         self.safe_addstr(y, 4, "Detected Installed Flatpak Applications:", curses.color_pair(1))
 
@@ -301,7 +318,7 @@ class CinnamonThemeTUI:
         # Quick Actions
         action_y = max_y - 4
         self.safe_addstr(action_y, 0, "─" * max_x)
-        self.safe_addstr(action_y + 1, 4, " Press [s] to forcefully re-sync Flatpak overrides now ", curses.color_pair(6))
+        self.safe_addstr(action_y + 1, 4, " Press [f] to toggle Font Anti-Blur | [s] to re-sync overrides ", curses.color_pair(6))
 
     def render_help_tab(self, start_y: int, max_y: int, max_x: int):
         self.safe_addstr(start_y, 2, "How Uniform Theming & Cursors Work on Linux Mint / Cinnamon:", curses.color_pair(1) | curses.A_BOLD)
@@ -429,6 +446,13 @@ class CinnamonThemeTUI:
                 24,
                 log
             )
+            self.refresh_status()
+
+        elif key in [ord('f'), ord('F')]:
+            def log(msg):
+                self.log_message(msg)
+                self.draw()
+            self.manager.toggle_antiblur(log)
             self.refresh_status()
 
         elif key in [ord('b'), ord('B')]:

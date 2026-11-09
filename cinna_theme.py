@@ -30,8 +30,12 @@ def print_status(manager: ThemeManager):
     fp_status = "SYNCHRONIZED (Filesystem + Env)" if status['flatpak_fs_synced'] else "UNCONFIGURED (Sandboxed)"
     print(f" Flatpak Sandbox Overrides   : {fp_status}")
 
-    fc_status = "SYNCHRONIZED (Subpixel RGB + HintFull)" if status.get('fontconfig_synced') else "UNCONFIGURED (Grayscale)"
+    fc_status = "SYNCHRONIZED (Subpixel RGB + HintFull)" if status.get('fontconfig_synced') else "UNCONFIGURED (Grayscale blur)"
     print(f" Subpixel Anti-Blur (LCD)    : {fc_status}")
+    if not status.get('fontconfig_synced'):
+        print("-" * 64)
+        print(" ⚠️  NOTICE: Flatpak text blurriness detected (Grayscale fallback).")
+        print("    Run 'cinna-theme --fix-blur' or press [F] in TUI to enable anti-blur.")
     print("=" * 64)
 
 def print_presets(manager: ThemeManager):
@@ -86,6 +90,8 @@ def main():
     parser.add_argument("--list", action="store_true", help="List available curated theme presets")
     parser.add_argument("--apply", metavar="PRESET_ID", help="Apply a theme preset directly without TUI")
     parser.add_argument("--sync-flatpak", action="store_true", help="Force sync host themes, icons & cursors to Flatpak")
+    parser.add_argument("--fix-blur", action="store_true", help="Fix Flatpak text blurriness (Enforce subpixel RGB & High-DPI fontconfig)")
+    parser.add_argument("--toggle-antiblur", action="store_true", help="Toggle subpixel font anti-blur and Flatpak overrides on/off")
     parser.add_argument("--fallback", action="store_true", help="Safety fallback: instantly restore Mint-Y-Dark system-wide")
     parser.add_argument("--reset", action="store_true", help="Restore system defaults (Mint-Y-Dark, default Bibata cursor & pure Adwaita)")
     parser.add_argument("--tui", action="store_true", help="Launch interactive TUI (default when no args provided)")
@@ -97,6 +103,10 @@ def main():
         print_status(manager)
     elif args.list:
         print_presets(manager)
+    elif args.fix_blur:
+        manager.enable_antiblur(print)
+    elif args.toggle_antiblur:
+        manager.toggle_antiblur(print)
     elif args.sync_flatpak:
         status = manager.get_status()
         manager.sync_flatpak_overrides(

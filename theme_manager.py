@@ -229,6 +229,41 @@ class ThemeManager:
             except Exception as e:
                 log(f"Notice: Could not write flags for {app_id}: {e}")
 
+    def enable_antiblur(self, log: Callable[[str], None] = lambda m: None) -> bool:
+        """Enable subpixel RGB font antialiasing and High-DPI fontconfig rules across host and Flatpaks."""
+        self.ensure_subpixel_fontconfig(log)
+        self.sync_electron_and_chromium_anti_blur(log)
+        status = self.get_status()
+        self.sync_flatpak_overrides(
+            status.get("gtk_theme", "Mint-Y-Dark"),
+            status.get("icon_theme", "Mint-Y"),
+            status.get("cursor_theme", "Bibata-Modern-Classic"),
+            int(status.get("cursor_size") or 24),
+            log
+        )
+        log("Subpixel font anti-blur enabled system-wide!")
+        return True
+
+    def disable_antiblur(self, log: Callable[[str], None] = lambda m: None) -> bool:
+        """Disable subpixel fontconfig rules and revert Flatpak font overrides to default."""
+        try:
+            if FONTCONFIG_FILE.exists():
+                FONTCONFIG_FILE.unlink()
+                log("Removed ~/.config/fontconfig/fonts.conf.")
+        except Exception as e:
+            log(f"Notice: {e}")
+
+        self.run_cmd(["flatpak", "override", "--user", "--nofilesystem=xdg-config/fontconfig:ro"])
+        log("Subpixel font anti-blur disabled (reverted to system defaults).")
+        return True
+
+    def toggle_antiblur(self, log: Callable[[str], None] = lambda m: None) -> bool:
+        """Toggle subpixel font anti-blur and Flatpak font overrides on or off."""
+        if FONTCONFIG_FILE.exists() and "lcdfilter" in FONTCONFIG_FILE.read_text():
+            return self.disable_antiblur(log)
+        else:
+            return self.enable_antiblur(log)
+
     def get_gsetting(self, schema: str, key: str) -> str:
         code, out = self.run_cmd(["gsettings", "get", schema, key])
         if code == 0:
