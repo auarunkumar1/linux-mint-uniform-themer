@@ -17,6 +17,8 @@ ICONS_DIR = HOME / ".local" / "share" / "icons"
 USER_ICONS_DIR = HOME / ".icons"
 GTK3_CONFIG_DIR = HOME / ".config" / "gtk-3.0"
 GTK4_CONFIG_DIR = HOME / ".config" / "gtk-4.0"
+FONTCONFIG_DIR = HOME / ".config" / "fontconfig"
+FONTCONFIG_FILE = FONTCONFIG_DIR / "fonts.conf"
 SYSTEM_THEMES_DIR = Path("/usr/share/themes")
 SYSTEM_ICONS_DIR = Path("/usr/share/icons")
 
@@ -27,6 +29,7 @@ class ThemeManager:
         USER_ICONS_DIR.mkdir(parents=True, exist_ok=True)
         GTK3_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         GTK4_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        FONTCONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
     def run_cmd(self, cmd: List[str], check: bool = False, env_extra: Optional[Dict[str, str]] = None, input_text: Optional[str] = None) -> Tuple[int, str]:
         """Execute a shell command with proper user-bin paths and return exit code and stripped output."""
@@ -132,6 +135,100 @@ class ThemeManager:
         except Exception as e:
             log(f"Could not update ~/.Xresources: {e}")
 
+    def get_font_dpi_and_scale(self) -> Tuple[int, float, int]:
+        """Detect active Cinnamon text-scaling-factor and DPI for crisp font rendering."""
+        scale_val = 1.0
+        try:
+            scale_str = self.get_gsetting("org.cinnamon.desktop.interface", "text-scaling-factor")
+            if scale_str:
+                scale_val = float(scale_str)
+        except Exception:
+            scale_val = 1.0
+
+        dpi = int(round(96 * scale_val))
+        try:
+            code, out = self.run_cmd(["xrdb", "-query"])
+            if code == 0:
+                for line in out.splitlines():
+                    if line.startswith("Xft.dpi:"):
+                        val = line.split(":", 1)[1].strip()
+                        dpi = int(val)
+                        break
+        except Exception:
+            pass
+
+        gtk_xft_dpi = dpi * 1024
+        return dpi, scale_val, gtk_xft_dpi
+
+    def ensure_subpixel_fontconfig(self, log: Callable[[str], None] = lambda m: None):
+        """Enforce subpixel RGB antialiasing, LCD default filtering and full hinting across host & Flatpak."""
+        FONTCONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        fonts_conf_content = """<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <!-- Enforce Subpixel RGB Antialiasing and Full Hinting for razor-sharp text -->
+  <match target="font">
+    <edit mode="assign" name="antialias"><bool>true</bool></edit>
+    <edit mode="assign" name="hinting"><bool>true</bool></edit>
+    <edit mode="assign" name="hintstyle"><const>hintfull</const></edit>
+    <edit mode="assign" name="rgba"><const>rgb</const></edit>
+    <edit mode="assign" name="lcdfilter"><const>lcddefault</const></edit>
+  </match>
+</fontconfig>
+"""
+        try:
+            if not FONTCONFIG_FILE.exists() or "lcdfilter" not in FONTCONFIG_FILE.read_text():
+                FONTCONFIG_FILE.write_text(fonts_conf_content)
+                log("Configured subpixel RGB antialiasing & LCD filter in ~/.config/fontconfig/fonts.conf.")
+        except Exception as e:
+            log(f"Notice: Could not write fontconfig file: {e}")
+
+    def sync_electron_and_chromium_anti_blur(self, log: Callable[[str], None] = lambda m: None):
+        """Configure crisp subpixel font rendering and native Wayland/X11 flags for Chromium and Electron Flatpaks."""
+        var_app = HOME / ".var" / "app"
+        if not var_app.exists():
+            return
+
+        flags_content = (
+            "--enable-font-antialiasing\n"
+            "--font-render-hinting=medium\n"
+            "--ozone-platform-hint=auto\n"
+        )
+
+        app_flag_files = {
+            "com.brave.Browser": "brave-flags.conf",
+            "com.google.Chrome": "chrome-flags.conf",
+            "org.chromium.Chromium": "chromium-flags.conf",
+            "com.vscodium.codium": "codium-flags.conf",
+            "com.visualstudio.code": "code-flags.conf",
+            "com.discordapp.Discord": "discord-flags.conf",
+            "com.spotify.Client": "spotify-flags.conf",
+            "com.slack.Slack": "slack-flags.conf",
+            "md.obsidian.Obsidian": "obsidian-flags.conf",
+        }
+
+        for app_dir in var_app.iterdir():
+            if not app_dir.is_dir():
+                continue
+            app_id = app_dir.name
+            config_dir = app_dir / "config"
+            if not config_dir.exists():
+                continue
+
+            target_filename = app_flag_files.get(app_id, "electron-flags.conf")
+            flag_file = config_dir / target_filename
+            try:
+                if not flag_file.exists():
+                    flag_file.write_text(flags_content)
+                    log(f"Configured crisp font & Ozone flags for {app_id} ({target_filename}).")
+                else:
+                    curr = flag_file.read_text()
+                    if "--enable-font-antialiasing" not in curr:
+                        flag_file.write_text(curr.rstrip() + "\n" + flags_content)
+                        log(f"Updated crisp font flags for {app_id}.")
+            except Exception as e:
+                log(f"Notice: Could not write flags for {app_id}: {e}")
+
     def get_gsetting(self, schema: str, key: str) -> str:
         code, out = self.run_cmd(["gsettings", "get", schema, key])
         if code == 0:
@@ -167,14 +264,14 @@ class ThemeManager:
             gtk4_active = True
             gtk4_target = "Custom user CSS file"
 
-        # Check Flatpak overrides
+        # Check Flatpak overrides & subpixel fontconfig sync
+        fontconfig_synced = FONTCONFIG_FILE.exists() and "lcdfilter" in FONTCONFIG_FILE.read_text()
         _, flatpak_out = self.run_cmd(["flatpak", "override", "--user", "--show"])
         flatpak_fs_synced = (
-            "~/.themes:ro" in flatpak_out or "xdg-data/themes:ro" in flatpak_out
-        ) and (
-            "~/.icons:ro" in flatpak_out or "xdg-data/icons:ro" in flatpak_out
-        ) and (
-            "xdg-config/gtk-4.0:ro" in flatpak_out
+            ("~/.themes:ro" in flatpak_out or "xdg-data/themes:ro" in flatpak_out) and
+            ("~/.icons:ro" in flatpak_out or "xdg-data/icons:ro" in flatpak_out) and
+            ("xdg-config/gtk-4.0:ro" in flatpak_out) and
+            ("xdg-config/fontconfig:ro" in flatpak_out)
         )
         flatpak_env_synced = (
             f"XCURSOR_THEME={cursor_theme}" in flatpak_out and
@@ -195,6 +292,7 @@ class ThemeManager:
             "color_scheme": color_scheme,
             "gtk4_active": gtk4_active,
             "gtk4_target": gtk4_target,
+            "fontconfig_synced": fontconfig_synced,
             "flatpak_fs_synced": flatpak_fs_synced,
             "flatpak_env_synced": flatpak_env_synced,
             "flatpak_raw_overrides": flatpak_out,
@@ -507,6 +605,10 @@ class ThemeManager:
         self.ensure_theme_in_user_space(gtk_theme, log)
         button_layout = self.get_gsetting("org.cinnamon.desktop.wm.preferences", "button-layout") or ":minimize,maximize,close"
 
+        dpi, scale_val, gtk_xft_dpi = self.get_font_dpi_and_scale()
+        self.ensure_subpixel_fontconfig(log)
+        self.sync_electron_and_chromium_anti_blur(log)
+
         gtk3_ini_content = (
             f"[Settings]\n"
             f"gtk-theme-name = {gtk_theme}\n"
@@ -516,6 +618,11 @@ class ThemeManager:
             f"gtk-decoration-layout = {button_layout}\n"
             f"gtk-application-prefer-dark-theme = {'1' if mode == 'dark' else '0'}\n"
             f"gtk-font-name = Ubuntu 10\n"
+            f"gtk-xft-antialias = 1\n"
+            f"gtk-xft-hinting = 1\n"
+            f"gtk-xft-hintstyle = hintfull\n"
+            f"gtk-xft-rgba = rgb\n"
+            f"gtk-xft-dpi = {gtk_xft_dpi}\n"
         )
         (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk3_ini_content)
 
@@ -530,9 +637,14 @@ class ThemeManager:
             f"gtk-decoration-layout = {button_layout}\n"
             f"gtk-application-prefer-dark-theme = {'1' if mode == 'dark' else '0'}\n"
             f"gtk-font-name = Ubuntu 10\n"
+            f"gtk-xft-antialias = 1\n"
+            f"gtk-xft-hinting = 1\n"
+            f"gtk-xft-hintstyle = hintfull\n"
+            f"gtk-xft-rgba = rgb\n"
+            f"gtk-xft-dpi = {gtk_xft_dpi}\n"
         )
         (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk4_ini_content)
-        log("Updated GTK 3.0 and GTK 4.0 settings.ini with decoration layout and cursor settings.")
+        log("Updated GTK 3.0 and GTK 4.0 settings.ini with decoration layout, cursor, and subpixel font settings.")
 
         # 4. Shadow cursor to ~/.icons for Flatpaks, write default index.theme & update xrdb
         if cursor_theme:
@@ -965,7 +1077,11 @@ windowcontrols button:backdrop > image {
             self.ensure_cursor_in_user_space(cursor_theme, log)
             self.update_xresources_cursor(cursor_theme, cursor_size, log)
 
-        # Sync GTK 3 & GTK 4 settings.ini so sandboxed apps read the current cursor & theme
+        dpi, scale_val, gtk_xft_dpi = self.get_font_dpi_and_scale()
+        self.ensure_subpixel_fontconfig(log)
+        self.sync_electron_and_chromium_anti_blur(log)
+
+        # Sync GTK 3 & GTK 4 settings.ini so sandboxed apps read the current cursor, theme & subpixel fonts
         button_layout = self.get_gsetting("org.cinnamon.desktop.wm.preferences", "button-layout") or ":minimize,maximize,close"
         gtk3_ini_content = (
             f"[Settings]\n"
@@ -976,6 +1092,11 @@ windowcontrols button:backdrop > image {
             f"gtk-decoration-layout = {button_layout}\n"
             f"gtk-application-prefer-dark-theme = 1\n"
             f"gtk-font-name = Ubuntu 10\n"
+            f"gtk-xft-antialias = 1\n"
+            f"gtk-xft-hinting = 1\n"
+            f"gtk-xft-hintstyle = hintfull\n"
+            f"gtk-xft-rgba = rgb\n"
+            f"gtk-xft-dpi = {gtk_xft_dpi}\n"
         )
         (GTK3_CONFIG_DIR / "settings.ini").write_text(gtk3_ini_content)
 
@@ -989,9 +1110,14 @@ windowcontrols button:backdrop > image {
             f"gtk-decoration-layout = {button_layout}\n"
             f"gtk-application-prefer-dark-theme = 1\n"
             f"gtk-font-name = Ubuntu 10\n"
+            f"gtk-xft-antialias = 1\n"
+            f"gtk-xft-hinting = 1\n"
+            f"gtk-xft-hintstyle = hintfull\n"
+            f"gtk-xft-rgba = rgb\n"
+            f"gtk-xft-dpi = {gtk_xft_dpi}\n"
         )
         (GTK4_CONFIG_DIR / "settings.ini").write_text(gtk4_ini_content)
-        log("Synchronized ~/.config/gtk-3.0/settings.ini and gtk-4.0/settings.ini.")
+        log("Synchronized ~/.config/gtk-3.0/settings.ini and gtk-4.0/settings.ini with subpixel font rendering.")
 
         # Filesystem permissions
         fs_rules = [
@@ -1000,7 +1126,10 @@ windowcontrols button:backdrop > image {
             "~/.themes:ro",
             "~/.icons:ro",
             "xdg-config/gtk-3.0:ro",
-            "xdg-config/gtk-4.0:ro"
+            "xdg-config/gtk-4.0:ro",
+            "xdg-config/fontconfig:ro",
+            "xdg-data/fonts:ro",
+            "~/.fonts:ro"
         ]
         cmd = ["flatpak", "override", "--user"]
         for rule in fs_rules:
@@ -1014,12 +1143,16 @@ windowcontrols button:backdrop > image {
             "--unset-env=ICON_THEME",
             f"--env=XCURSOR_THEME={cursor_theme}",
             f"--env=XCURSOR_SIZE={cursor_size}",
-            "--env=QT_QPA_PLATFORMTHEME=qt5ct"
+            "--env=QT_QPA_PLATFORMTHEME=qt5ct",
+            "--env=QT_AUTO_SCREEN_SCALE_FACTOR=1",
+            "--env=QT_ENABLE_HIGHDPI_SCALING=1",
+            f"--env=GDK_DPI_SCALE={round(scale_val, 2)}",
+            "--env=ELECTRON_OZONE_PLATFORM_HINT=auto"
         ])
 
         code, out = self.run_cmd(cmd)
         if code == 0:
-            log("Flatpak user overrides configured successfully.")
+            log("Flatpak user overrides configured successfully (themes, cursors, subpixel fontconfig & Ozone).")
         else:
             log(f"Flatpak override notice: {out}")
 

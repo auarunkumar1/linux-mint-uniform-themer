@@ -29,6 +29,9 @@ def print_status(manager: ThemeManager):
 
     fp_status = "SYNCHRONIZED (Filesystem + Env)" if status['flatpak_fs_synced'] else "UNCONFIGURED (Sandboxed)"
     print(f" Flatpak Sandbox Overrides   : {fp_status}")
+
+    fc_status = "SYNCHRONIZED (Subpixel RGB + HintFull)" if status.get('fontconfig_synced') else "UNCONFIGURED (Grayscale)"
+    print(f" Subpixel Anti-Blur (LCD)    : {fc_status}")
     print("=" * 64)
 
 def print_presets(manager: ThemeManager):
